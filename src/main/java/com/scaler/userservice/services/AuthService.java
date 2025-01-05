@@ -6,6 +6,8 @@ import com.scaler.userservice.models.SessionStatus;
 import com.scaler.userservice.models.User;
 import com.scaler.userservice.repositories.SessionRepository;
 import com.scaler.userservice.repositories.UserRepository;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.MacAlgorithm;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -15,29 +17,37 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.MultiValueMapAdapter;
 
-import java.util.HashMap;
-import java.util.Optional;
+import javax.crypto.SecretKey;
+import java.time.LocalDate;
+import java.util.*;
 
 @Service
 public class AuthService {
-    @Autowired
+
     private UserRepository userRepository;
-    @Autowired
     private SessionRepository sessionRepository;
-    @Autowired
     private BCryptPasswordEncoder encoder;
-    public AuthService(UserRepository userRepository, SessionRepository sessionRepository){
+
+    public AuthService(UserRepository userRepository, SessionRepository sessionRepository, BCryptPasswordEncoder encoder){
         this.userRepository = userRepository;
         this.sessionRepository = sessionRepository;
-
+        this.encoder = encoder;
     }
     public ResponseEntity<UserDto> login(String email, String password){
         Optional<User> userOptional = userRepository.findByEmail(email);
         if(userOptional.isEmpty()){
             return null;
         }
-        String token = RandomStringUtils.randomAlphanumeric(30);
         User user = userOptional.get();
+        String token = RandomStringUtils.randomAlphanumeric(30);
+        MacAlgorithm alg = Jwts.SIG.HS256;
+        SecretKey key = alg.key().build();
+        Map<String, Object> jsonForJwt = new HashMap<>();
+        jsonForJwt.put("email", user.getEmail());
+        jsonForJwt.put("roles", user.getRoles());
+        jsonForJwt.put("createdAt",new Date());
+        jsonForJwt.put("expiryAt", new Date(LocalDate.now().plusDays(3).toEpochDay()));
+        token = Jwts.builder().claims(jsonForJwt).signWith(key,alg).compact();
         if(! encoder.matches(password,user.getPassword())){
             return null;
         }
@@ -71,7 +81,11 @@ public class AuthService {
     public SessionStatus validate(String token, Long userId){
         Optional<Session> sessionOptional = sessionRepository.findByTokenAndUser_Id(token, userId);
         if(sessionOptional.isEmpty()){
-            return null;
+            return SessionStatus.ENDED;
+        }
+        Session session = sessionOptional.get();
+        if(!session.getSessionStatus().equals(SessionStatus.ACTIVE)){
+            return SessionStatus.ENDED;
         }
         return SessionStatus.ACTIVE;
     }
