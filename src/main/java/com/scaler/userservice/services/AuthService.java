@@ -1,11 +1,14 @@
 package com.scaler.userservice.services;
 
 import com.scaler.userservice.dtos.UserDto;
+import com.scaler.userservice.models.Role;
 import com.scaler.userservice.models.Session;
 import com.scaler.userservice.models.SessionStatus;
 import com.scaler.userservice.models.User;
 import com.scaler.userservice.repositories.SessionRepository;
 import com.scaler.userservice.repositories.UserRepository;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.MacAlgorithm;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -83,6 +86,12 @@ public class AuthService {
         if(sessionOptional.isEmpty()){
             return SessionStatus.ENDED;
         }
+        Jws<Claims> claimsJws = Jwts.parser()
+                .build()
+                .parseSignedClaims(token);
+        String email = (String) claimsJws.getPayload().get("email");
+        List<Role> roles = (List<Role>) claimsJws.getPayload().get("roles");
+        Date createdAt = (Date) claimsJws.getPayload().get("createdAt");
         Session session = sessionOptional.get();
         if(!session.getSessionStatus().equals(SessionStatus.ACTIVE)){
             return SessionStatus.ENDED;
